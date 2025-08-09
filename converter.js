@@ -92,13 +92,16 @@ class FileConverter {
     }
     
     async convertImageToPDF(file, fileName, onProgress) {
-        // For a real implementation, you'd use jsPDF library
-        // This is a simplified version that creates a basic PDF structure
         return new Promise((resolve, reject) => {
             const img = new Image();
             
             img.onload = async () => {
                 try {
+                    // Check if jsPDF is available, if not load it
+                    if (typeof window.jsPDF === 'undefined') {
+                        await this.loadJsPDF();
+                    }
+                    
                     // Progress simulation
                     let progress = 0;
                     const progressInterval = setInterval(() => {
@@ -109,29 +112,40 @@ class FileConverter {
                         }
                     }, 100);
                     
-                    // Simple PDF creation (you'd normally use jsPDF here)
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
+                    // Create PDF using jsPDF
+                    const { jsPDF } = window;
+                    const pdf = new jsPDF();
                     
                     // Calculate dimensions to fit A4 page
-                    const maxWidth = 595; // A4 width in points
-                    const maxHeight = 842; // A4 height in points
-                    const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = pdf.internal.pageSize.getHeight();
+                    const ratio = Math.min(pdfWidth / img.width, pdfHeight / img.height);
                     
-                    canvas.width = img.width * ratio;
-                    canvas.height = img.height * ratio;
+                    const width = img.width * ratio;
+                    const height = img.height * ratio;
                     
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    // Center the image
+                    const x = (pdfWidth - width) / 2;
+                    const y = (pdfHeight - height) / 2;
                     
-                    // Convert to blob (simplified - real implementation would use proper PDF library)
-                    canvas.toBlob((blob) => {
-                        onProgress(100);
-                        resolve({
-                            blob,
-                            filename: `${fileName}.pdf`,
-                            type: 'application/pdf'
-                        });
-                    }, 'image/png');
+                    // Convert image to base64 and add to PDF
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    
+                    const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                    pdf.addImage(imgData, 'JPEG', x, y, width, height);
+                    
+                    const pdfBlob = pdf.output('blob');
+                    
+                    onProgress(100);
+                    resolve({
+                        blob: pdfBlob,
+                        filename: `${fileName}.pdf`,
+                        type: 'application/pdf'
+                    });
                     
                 } catch (error) {
                     reject(error);
@@ -144,52 +158,98 @@ class FileConverter {
     }
     
     async convertPDFToImage(file, targetFormat, fileName, onProgress) {
-        // For real implementation, you'd use PDF.js
-        // This is a placeholder that shows the concept
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            
-            reader.onload = (e) => {
-                // Progress simulation
-                let progress = 0;
-                const progressInterval = setInterval(() => {
-                    progress += 12;
-                    onProgress(Math.min(progress, 100));
-                    if (progress >= 100) {
-                        clearInterval(progressInterval);
-                        
-                        // Placeholder conversion result
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 600;
-                        canvas.height = 800;
-                        const ctx = canvas.getContext('2d');
-                        
-                        // Draw placeholder content
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.fillStyle = '#000000';
-                        ctx.font = '20px Arial';
-                        ctx.fillText('PDF Content Converted', 50, 100);
-                        ctx.fillText(`To ${targetFormat.toUpperCase()}`, 50, 140);
-                        
-                        const outputFormat = targetFormat === 'jpg' ? 'image/jpeg' : `image/${targetFormat}`;
-                        
-                        canvas.toBlob((blob) => {
-                            resolve({
-                                blob,
-                                filename: `${fileName}.${targetFormat}`,
-                                type: outputFormat
-                            });
-                        }, outputFormat, 0.9);
-                    }
-                }, 80);
-            };
-            
-            reader.onerror = () => reject(new Error('Failed to read PDF file'));
-            reader.readAsArrayBuffer(file);
+        return new Promise(async (resolve, reject) => {
+            try {
+                // Check if PDF.js is available, if not load it
+                if (typeof window.pdfjsLib === 'undefined') {
+                    await this.loadPDFJS();
+                }
+                
+                const pdfjsLib = window.pdfjsLib;
+                
+                // Read the file
+                const arrayBuffer = await file.arrayBuffer();
+                
+                onProgress(20);
+                
+                // Load PDF document
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                onProgress(40);
+                
+                // Get first page
+                const page = await pdf.getPage(1);
+                onProgress(60);
+                
+                // Set up canvas for rendering
+                const scale = 2.0; // Higher scale for better quality
+                const viewport = page.getViewport({ scale });
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                
+                // Render PDF page to canvas
+                await page.render({
+                    canvasContext: ctx,
+                    viewport: viewport
+                }).promise;
+                
+                onProgress(90);
+                
+                // Convert canvas to blob
+                const outputFormat = targetFormat === 'jpg' ? 'image/jpeg' : `image/${targetFormat}`;
+                const quality = targetFormat === 'jpg' ? 0.9 : undefined;
+                
+                canvas.toBlob((blob) => {
+                    onProgress(100);
+                    resolve({
+                        blob,
+                        filename: `${fileName}.${targetFormat}`,
+                        type: outputFormat
+                    });
+                }, outputFormat, quality);
+                
+            } catch (error) {
+                console.error('PDF to image conversion error:', error);
+                reject(new Error(`Failed to convert PDF to image: ${error.message}`));
+            }
         });
     }
     
+    async loadJsPDF() {
+        if (typeof window.jsPDF !== 'undefined') return;
+        
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            script.onload = () => {
+                if (typeof window.jspdf !== 'undefined') {
+                    window.jsPDF = window.jspdf.jsPDF;
+                }
+                resolve();
+            };
+            script.onerror = () => reject(new Error('Failed to load jsPDF library'));
+            document.head.appendChild(script);
+        });
+    }
+    
+    async loadPDFJS() {
+        if (typeof window.pdfjsLib !== 'undefined') return;
+        
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            script.onload = () => {
+                // Set worker source for PDF.js
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                resolve();
+            };
+            script.onerror = () => reject(new Error('Failed to load PDF.js library'));
+            document.head.appendChild(script);
+        });
+    }
+
     downloadFile(result) {
         const url = URL.createObjectURL(result.blob);
         const a = document.createElement('a');
