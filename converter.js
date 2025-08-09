@@ -188,14 +188,48 @@ class FileConverter {
     }
     
     async convertPDFToImage(file, targetFormat, fileName, onProgress) {
-        console.log('🔧 REAL PDF CONTENT PRESERVATION - Starting');
+        console.log('🚀 USING WORKING PDF EXTRACTOR FOR CONTENT PRESERVATION');
         
         try {
-            return await this.convertPDFWithRealContent(file, targetFormat, fileName, onProgress);
+            // Load the working PDF extractor
+            if (!this.workingExtractor) {
+                await this.loadWorkingExtractor();
+                this.workingExtractor = new WorkingPDFExtractor();
+            }
+            
+            // Use the working extractor that actually preserves content
+            const result = await this.workingExtractor.convertPDFToImageWithContent(
+                file, targetFormat, fileName, onProgress
+            );
+            
+            console.log('🎉 PDF CONTENT SUCCESSFULLY PRESERVED!');
+            return result;
+            
         } catch (error) {
-            console.error('❌ PDF conversion failed:', error);
-            throw new Error(`Cannot convert PDF: ${error.message}`);
+            console.error('❌ Working extractor failed:', error);
+            
+            // Fallback to the previous method
+            console.log('🔄 Trying fallback conversion...');
+            return await this.convertPDFWithRealContent(file, targetFormat, fileName, onProgress);
         }
+    }
+    
+    async loadWorkingExtractor() {
+        console.log('📚 Loading working PDF extractor...');
+        
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = './working-pdf-extractor.js';
+            script.onload = () => {
+                console.log('✅ Working PDF extractor loaded');
+                resolve();
+            };
+            script.onerror = () => {
+                console.warn('⚠️ Could not load working extractor, using fallback');
+                resolve(); // Don't reject, use fallback
+            };
+            document.head.appendChild(script);
+        });
     }
     
     async convertPDFWithRealContent(file, targetFormat, fileName, onProgress) {
