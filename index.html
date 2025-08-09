@@ -671,13 +671,19 @@
                 
             } catch (error) {
                 console.error('Conversion failed:', error);
-                progressText.textContent = `Conversion failed: ${error.message}`;
+                progressText.innerHTML = `
+                    <strong>Conversion Failed:</strong><br>
+                    ${error.message}<br>
+                    <small>Check browser console (F12) for detailed logs</small>
+                `;
                 progressText.style.color = '#dc3545';
-                convertBtn.textContent = 'Try Again';
+                progressText.style.fontSize = '14px';
+                convertBtn.textContent = 'Try Again (Check Console F12)';
                 convertBtn.disabled = false;
                 convertBtn.style.background = '#dc3545';
                 convertBtn.onclick = () => {
                     progressText.style.color = '#333';
+                    progressText.style.fontSize = '16px';
                     convertBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
                     resetConverter();
                 };
