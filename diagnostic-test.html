@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Conversion Diagnostic Test</title>
+    <style>
+        .log { font-family: monospace; font-size: 12px; padding: 5px; margin: 2px 0; }
+        .error { background: #ffebee; color: #c62828; }
+        .warning { background: #fff3e0; color: #ef6c00; }
+        .info { background: #e3f2fd; color: #1565c0; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        canvas { border: 1px solid #ccc; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔧 PDF Conversion Diagnostic Test</h1>
+    <div id="logs"></div>
+    <div id="canvases"></div>
+
+    <script>
+        function log(level, message) {
+            const div = document.createElement('div');
+            div.className = `log ${level}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('logs').appendChild(div);
+            console.log(`${level.toUpperCase()}: ${message}`);
+        }
+        
+        function addCanvas(title, canvas) {
+            const container = document.createElement('div');
+            container.innerHTML = `<h4>${title}</h4>`;
+            container.appendChild(canvas);
+            document.getElementById('canvases').appendChild(container);
+        }
+        
+        async function runDiagnostics() {
+            log('info', '🚀 Starting PDF conversion diagnostics...');
+            
+            try {
+                // Step 1: Test PDF.js loading
+                log('info', '📚 Testing PDF.js loading...');
+                
+                // Try to load PDF.js from multiple sources
+                const pdfJsSources = [
+                    'https://mozilla.github.io/pdf.js/build/pdf.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js',
+                    'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.min.js'
+                ];
+                
+                let pdfJsLoaded = false;
+                
+                for (const src of pdfJsSources) {
+                    try {
+                        log('info', `Trying to load PDF.js from: ${src}`);
+                        await loadScript(src);
+                        
+                        if (window.pdfjsLib || window.PDFJS) {
+                            const lib = window.pdfjsLib || window.PDFJS;
+                            window.pdfjsLib = lib;
+                            
+                            log('success', `✅ PDF.js loaded successfully from ${src}`);
+                            log('info', `PDF.js version info: ${lib.version || 'unknown'}`);
+                            pdfJsLoaded = true;
+                            break;
+                        }
+                    } catch (error) {
+                        log('warning', `Failed to load from ${src}: ${error.message}`);
+                    }
+                }
+                
+                if (!pdfJsLoaded) {
+                    throw new Error('Could not load PDF.js from any source');
+                }
+                
+                // Step 2: Test worker setup
+                log('info', '⚙️ Setting up PDF.js worker...');
+                
+                try {
+                    if (window.pdfjsLib.GlobalWorkerOptions) {
+                        // Try to use worker
+                        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+                        log('success', '✅ PDF.js worker configured');
+                    } else {
+                        log('warning', '⚠️ No GlobalWorkerOptions available, continuing without worker');
+                    }
+                } catch (workerError) {
+                    log('warning', `Worker setup failed: ${workerError.message}`);
+                }
+                
+                // Step 3: Test jsPDF loading
+                log('info', '📄 Testing jsPDF loading...');
+                
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+                
+                if (window.jspdf && window.jspdf.jsPDF) {
+                    log('success', '✅ jsPDF loaded successfully');
+                } else {
+                    throw new Error('jsPDF failed to load');
+                }
+                
+                // Step 4: Create test PDF
+                log('info', '🔬 Creating test PDF with known content...');
+                
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF();
+                
+                pdf.setFontSize(16);
+                pdf.text('DIAGNOSTIC TEST PDF', 20, 30);
+                pdf.text('This text should be preserved in conversion.', 20, 50);
+                pdf.text('Line 2: Hello World', 20, 70);
+                pdf.text('Line 3: 123456789', 20, 90);
+                
+                // Add a rectangle
+                pdf.rect(20, 100, 80, 40);
+                
+                const pdfBlob = pdf.output('blob');
+                const pdfFile = new File([pdfBlob], 'diagnostic.pdf', { type: 'application/pdf' });
+                
+                log('success', `✅ Test PDF created: ${pdfBlob.size} bytes`);
+                
+                // Step 5: Test PDF parsing
+                log('info', '🔍 Testing PDF parsing with PDF.js...');
+                
+                const arrayBuffer = await pdfFile.arrayBuffer();
+                
+                const loadingTask = window.pdfjsLib.getDocument({
+                    data: arrayBuffer,
+                    verbosity: 0
+                });
+                
+                const pdfDoc = await loadingTask.promise;
+                log('success', `✅ PDF parsed successfully: ${pdfDoc.numPages} pages`);
+                
+                // Step 6: Test page loading
+                log('info', '📄 Testing page loading...');
+                
+                const page = await pdfDoc.getPage(1);
+                const viewport = page.getViewport({ scale: 1.0 });
+                
+                log('success', `✅ Page loaded: ${viewport.width}x${viewport.height}`);
+                
+                // Step 7: Test text extraction
+                log('info', '📝 Testing text extraction...');
+                
+                const textContent = await page.getTextContent();
+                const extractedText = textContent.items.map(item => item.str).join(' ');
+                
+                log('success', `✅ Text extracted: "${extractedText}"`);
+                log('info', `Found ${textContent.items.length} text items`);
+                
+                // Step 8: Test canvas rendering
+                log('info', '🎨 Testing canvas rendering...');
+                
+                const scale = 2.0;
+                const scaledViewport = page.getViewport({ scale });
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = scaledViewport.width;
+                canvas.height = scaledViewport.height;
+                
+                // White background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                log('info', `Canvas created: ${canvas.width}x${canvas.height}`);
+                
+                // Attempt PDF rendering
+                try {
+                    const renderContext = {
+                        canvasContext: ctx,
+                        viewport: scaledViewport
+                    };
+                    
+                    const renderTask = page.render(renderContext);
+                    await renderTask.promise;
+                    
+                    log('success', '✅ PDF rendered to canvas successfully!');
+                    
+                    // Analyze rendered content
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const analysis = analyzePixels(imageData);
+                    
+                    log('info', `Pixel analysis: ${analysis.details}`);
+                    
+                    if (analysis.hasContent) {
+                        log('success', '🎉 RENDERED CONTENT DETECTED!');
+                    } else {
+                        log('error', '❌ NO CONTENT IN RENDERED CANVAS');
+                    }
+                    
+                    addCanvas('PDF.js Rendered Canvas', canvas);
+                    
+                } catch (renderError) {
+                    log('error', `❌ PDF rendering failed: ${renderError.message}`);
+                    
+                    // Fallback: manual text rendering
+                    log('info', '🔄 Attempting manual text rendering...');
+                    
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '14px Arial';
+                    
+                    let y = 40;
+                    textContent.items.forEach((item, index) => {
+                        if (item.str && item.str.trim()) {
+                            // Use transform matrix for positioning if available
+                            let x = 20;
+                            let textY = y;
+                            
+                            if (item.transform && item.transform.length >= 6) {
+                                x = item.transform[4] * scale;
+                                textY = canvas.height - (item.transform[5] * scale);
+                            }
+                            
+                            ctx.fillText(item.str, x, textY);
+                            
+                            if (!item.transform || item.transform.length < 6) {
+                                y += 20; // Only increment if using fallback positioning
+                            }
+                        }
+                    });
+                    
+                    log('success', '✅ Manual text rendering completed');
+                    addCanvas('Manual Text Rendered Canvas', canvas);
+                }
+                
+                // Step 9: Test conversion to blob
+                log('info', '💾 Testing blob conversion...');
+                
+                const resultBlob = await new Promise((resolve) => {
+                    canvas.toBlob((blob) => {
+                        resolve(blob);
+                    }, 'image/png', 1.0);
+                });
+                
+                log('success', `✅ Blob created: ${resultBlob.size} bytes`);
+                
+                // Final verification
+                if (resultBlob.size > 1000) {
+                    log('success', '🎉 DIAGNOSTIC TEST PASSED: PDF content conversion is working!');
+                } else {
+                    log('error', '❌ DIAGNOSTIC TEST FAILED: Blob too small, likely no content');
+                }
+                
+            } catch (error) {
+                log('error', `❌ Diagnostic test failed: ${error.message}`);
+                console.error('Diagnostic error:', error);
+            }
+        }
+        
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`Failed to load ${src}`));
+                document.head.appendChild(script);
+            });
+        }
+        
+        function analyzePixels(imageData) {
+            const data = imageData.data;
+            let blackPixels = 0;
+            let whitePixels = 0;
+            let otherPixels = 0;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                
+                if (r < 50 && g < 50 && b < 50) {
+                    blackPixels++;
+                } else if (r > 240 && g > 240 && b > 240) {
+                    whitePixels++;
+                } else {
+                    otherPixels++;
+                }
+            }
+            
+            const totalPixels = data.length / 4;
+            const contentRatio = (blackPixels + otherPixels) / totalPixels;
+            
+            return {
+                hasContent: blackPixels > 50, // At least 50 black pixels
+                details: `Black: ${blackPixels}, White: ${whitePixels}, Other: ${otherPixels}, Total: ${totalPixels}, Content ratio: ${(contentRatio * 100).toFixed(2)}%`
+            };
+        }
+        
+        // Run diagnostics when page loads
+        window.addEventListener('load', () => {
+            setTimeout(runDiagnostics, 500);
+        });
+    </script>
+</body>
+</html>

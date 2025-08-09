@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple PDF Content Preservation Test</title>
+    <style>
+        .result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        canvas { border: 1px solid #ccc; margin: 10px 0; max-width: 100%; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Simple PDF Content Preservation Test</h1>
+    <div id="results"></div>
+    <div id="canvases"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="working-pdf-extractor.js"></script>
+    <script src="converter.js"></script>
+    
+    <script>
+        let testResults = [];
+        
+        function addResult(type, message) {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = message;
+            document.getElementById('results').appendChild(div);
+            
+            console.log(`${type.toUpperCase()}: ${message}`);
+            testResults.push({ type, message, timestamp: Date.now() });
+        }
+        
+        function addCanvas(title, canvas) {
+            const container = document.createElement('div');
+            container.innerHTML = `<h4>${title}</h4>`;
+            container.appendChild(canvas);
+            document.getElementById('canvases').appendChild(container);
+        }
+        
+        async function runSimpleTest() {
+            addResult('info', '🚀 Starting simple PDF content preservation test...');
+            
+            try {
+                // Test 1: Create a simple PDF with known content
+                addResult('info', '📄 Creating test PDF with known content...');
+                
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF();
+                
+                // Add clear, testable content
+                pdf.setFontSize(20);
+                pdf.text('TEST CONTENT PRESERVATION', 20, 40);
+                
+                pdf.setFontSize(14);
+                pdf.text('Line 1: This is test text that should be preserved', 20, 70);
+                pdf.text('Line 2: HELLO WORLD 123456', 20, 90);
+                pdf.text('Line 3: Special chars: @#$%^&*()', 20, 110);
+                
+                // Add a simple shape
+                pdf.rect(20, 130, 100, 50);
+                
+                const pdfBlob = pdf.output('blob');
+                const pdfFile = new File([pdfBlob], 'test.pdf', { type: 'application/pdf' });
+                
+                addResult('pass', `✅ Test PDF created successfully (${pdfBlob.size} bytes)`);
+                
+                // Test 2: Convert the PDF
+                addResult('info', '🔄 Converting PDF to image...');
+                
+                const converter = new FileConverter();
+                let progressUpdates = 0;
+                
+                const result = await converter.convertPDFToImage(
+                    pdfFile, 
+                    'png', 
+                    'test_conversion',
+                    (progress) => {
+                        console.log(`Conversion progress: ${progress}%`);
+                        progressUpdates++;
+                    }
+                );
+                
+                addResult('pass', `✅ PDF conversion completed (${result.blob.size} bytes, ${progressUpdates} progress updates)`);
+                
+                // Test 3: Analyze the converted image
+                addResult('info', '🔍 Analyzing converted image for content...');
+                
+                const analysisResult = await analyzeConvertedImage(result.blob);
+                
+                if (analysisResult.hasContent) {
+                    addResult('pass', `✅ CONTENT PRESERVED! Analysis: ${analysisResult.details}`);
+                } else {
+                    addResult('fail', `❌ NO CONTENT DETECTED! Analysis: ${analysisResult.details}`);
+                }
+                
+                // Test 4: Visual verification
+                addResult('info', '👀 Creating visual proof...');
+                
+                const verificationCanvas = await createVisualVerification(result.blob);
+                addCanvas('Converted Image (Visual Verification)', verificationCanvas);
+                
+                // Final result
+                const testPassed = analysisResult.hasContent && result.blob.size > 5000;
+                
+                if (testPassed) {
+                    addResult('pass', '🎉 OVERALL TEST RESULT: PASSED - PDF content is being preserved!');
+                } else {
+                    addResult('fail', '❌ OVERALL TEST RESULT: FAILED - PDF content preservation is not working properly.');
+                }
+                
+                return testPassed;
+                
+            } catch (error) {
+                addResult('fail', `❌ Test failed with error: ${error.message}`);
+                console.error('Test error:', error);
+                return false;
+            }
+        }
+        
+        async function analyzeConvertedImage(imageBlob) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Analyze pixels for content
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    
+                    let blackPixels = 0;      // Text pixels
+                    let whitePixels = 0;      // Background pixels  
+                    let grayPixels = 0;       // Anti-aliased pixels
+                    let colorPixels = 0;      // Other colored pixels
+                    let totalPixels = data.length / 4;
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1]; 
+                        const b = data[i + 2];
+                        
+                        // Classify pixels
+                        if (r < 50 && g < 50 && b < 50) {
+                            blackPixels++;
+                        } else if (r > 240 && g > 240 && b > 240) {
+                            whitePixels++;
+                        } else if (Math.abs(r - g) < 20 && Math.abs(g - b) < 20) {
+                            grayPixels++;
+                        } else {
+                            colorPixels++;
+                        }
+                    }
+                    
+                    const blackRatio = blackPixels / totalPixels;
+                    const contentRatio = (blackPixels + grayPixels + colorPixels) / totalPixels;
+                    
+                    // Determine if we have real content
+                    const hasRealContent = blackPixels > 100 && blackRatio > 0.001; // At least 100 black pixels and 0.1%
+                    
+                    resolve({
+                        hasContent: hasRealContent,
+                        details: `Dimensions: ${canvas.width}x${canvas.height}, Black pixels: ${blackPixels} (${(blackRatio*100).toFixed(3)}%), White: ${whitePixels}, Gray: ${grayPixels}, Color: ${colorPixels}, Content ratio: ${(contentRatio*100).toFixed(2)}%`
+                    });
+                };
+                
+                img.onerror = () => {
+                    resolve({
+                        hasContent: false,
+                        details: 'Failed to load converted image'
+                    });
+                };
+                
+                img.src = URL.createObjectURL(imageBlob);
+            });
+        }
+        
+        async function createVisualVerification(imageBlob) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Add analysis overlay
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(5, 5, canvas.width - 10, canvas.height - 10);
+                    
+                    ctx.fillStyle = 'red';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(`Converted Image: ${canvas.width}x${canvas.height}`, 10, canvas.height - 10);
+                    
+                    resolve(canvas);
+                };
+                img.src = URL.createObjectURL(imageBlob);
+            });
+        }
+        
+        // Run the test when page loads
+        window.addEventListener('load', () => {
+            setTimeout(runSimpleTest, 1000); // Wait 1 second for everything to load
+        });
+    </script>
+</body>
+</html>

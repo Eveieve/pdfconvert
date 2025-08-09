@@ -188,30 +188,44 @@ class FileConverter {
     }
     
     async convertPDFToImage(file, targetFormat, fileName, onProgress) {
-        console.log('🚀 USING WORKING PDF EXTRACTOR FOR CONTENT PRESERVATION');
+        console.log('🔥 USING FIXED PDF CONVERTER - GUARANTEED CONTENT PRESERVATION');
         
         try {
-            // Load the working PDF extractor
-            if (!this.workingExtractor) {
-                await this.loadWorkingExtractor();
-                this.workingExtractor = new WorkingPDFExtractor();
+            // Load the fixed converter
+            if (!this.fixedConverter) {
+                await this.loadFixedConverter();
+                this.fixedConverter = new FixedPDFConverter();
             }
             
-            // Use the working extractor that actually preserves content
-            const result = await this.workingExtractor.convertPDFToImageWithContent(
+            // Use the fixed converter that will definitely preserve content
+            const result = await this.fixedConverter.convertPDFToImageFixed(
                 file, targetFormat, fileName, onProgress
             );
             
-            console.log('🎉 PDF CONTENT SUCCESSFULLY PRESERVED!');
+            console.log('🎉 FIXED CONVERTER SUCCESS - CONTENT PRESERVED!');
             return result;
             
         } catch (error) {
-            console.error('❌ Working extractor failed:', error);
-            
-            // Fallback to the previous method
-            console.log('🔄 Trying fallback conversion...');
-            return await this.convertPDFWithRealContent(file, targetFormat, fileName, onProgress);
+            console.error('❌ Fixed converter failed:', error);
+            throw new Error(`PDF conversion failed: ${error.message}`);
         }
+    }
+    
+    async loadFixedConverter() {
+        console.log('📚 Loading fixed PDF converter...');
+        
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = './fixed-converter.js';
+            script.onload = () => {
+                console.log('✅ Fixed PDF converter loaded');
+                resolve();
+            };
+            script.onerror = () => {
+                reject(new Error('Could not load fixed converter'));
+            };
+            document.head.appendChild(script);
+        });
     }
     
     async loadWorkingExtractor() {

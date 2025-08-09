@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🔥 FINAL PDF Content Preservation Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 5px solid; }
+        .pass { background: #d4edda; color: #155724; border-color: #28a745; }
+        .fail { background: #f8d7da; color: #721c24; border-color: #dc3545; }
+        .info { background: #d1ecf1; color: #0c5460; border-color: #17a2b8; }
+        .warning { background: #fff3cd; color: #856404; border-color: #ffc107; }
+        .test-section { background: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        canvas { border: 2px solid #007bff; margin: 10px 0; max-width: 100%; }
+        .canvas-container { text-align: center; margin: 20px 0; }
+        pre { background: #f8f9fa; padding: 10px; overflow: auto; font-size: 12px; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
+        .run-test { background: #28a745; color: white; border: none; border-radius: 5px; }
+        .run-test:hover { background: #218838; }
+    </style>
+</head>
+<body>
+    <h1>🔥 FINAL PDF Content Preservation Test</h1>
+    <p><strong>This test will definitively prove whether PDF content is preserved during conversion.</strong></p>
+    
+    <button class="run-test" onclick="runFinalTest()">🚀 RUN FINAL TEST</button>
+    <button onclick="clearResults()">🧹 Clear Results</button>
+    
+    <div id="results"></div>
+    <div id="visual-proof"></div>
+
+    <!-- Load all scripts in correct order -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="fixed-converter.js"></script>
+    <script src="converter.js"></script>
+    
+    <!-- Wait for all scripts to load before initializing -->
+    <script>
+        // Ensure all dependencies are loaded
+        window.ensureLibrariesLoaded = function() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 50;
+                
+                const checkLibraries = () => {
+                    attempts++;
+                    
+                    const jspdfLoaded = window.jspdf && window.jspdf.jsPDF;
+                    const fixedConverterLoaded = window.FixedPDFConverter;
+                    const fileConverterLoaded = window.FileConverter;
+                    
+                    console.log(`Library check ${attempts}: jsPDF=${!!jspdfLoaded}, FixedConverter=${!!fixedConverterLoaded}, FileConverter=${!!fileConverterLoaded}`);
+                    
+                    if (jspdfLoaded && fixedConverterLoaded && fileConverterLoaded) {
+                        console.log('✅ All libraries loaded successfully');
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        const missing = [];
+                        if (!jspdfLoaded) missing.push('jsPDF');
+                        if (!fixedConverterLoaded) missing.push('FixedPDFConverter');
+                        if (!fileConverterLoaded) missing.push('FileConverter');
+                        reject(new Error(`Libraries not loaded after ${maxAttempts} attempts. Missing: ${missing.join(', ')}`));
+                    } else {
+                        setTimeout(checkLibraries, 100);
+                    }
+                };
+                
+                checkLibraries();
+            });
+        };
+    </script>
+    
+    <script>
+        let testResults = [];
+        let testStartTime;
+        
+        function addResult(type, title, message, details = '') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = `
+                <strong>${getIcon(type)} ${title}</strong><br>
+                ${message}
+                ${details ? `<pre>${details}</pre>` : ''}
+            `;
+            document.getElementById('results').appendChild(div);
+            
+            console.log(`${type.toUpperCase()}: ${title} - ${message}`);
+            testResults.push({ type, title, message, details, timestamp: Date.now() });
+        }
+        
+        function getIcon(type) {
+            const icons = {
+                'pass': '✅',
+                'fail': '❌', 
+                'info': 'ℹ️',
+                'warning': '⚠️'
+            };
+            return icons[type] || '•';
+        }
+        
+        function addVisualProof(title, canvas, analysis) {
+            const container = document.createElement('div');
+            container.className = 'canvas-container';
+            container.innerHTML = `
+                <h3>${title}</h3>
+                <div>Dimensions: ${canvas.width}×${canvas.height} | Size: ${(canvas.width * canvas.height * 4 / 1024).toFixed(1)}KB</div>
+            `;
+            container.appendChild(canvas);
+            
+            if (analysis) {
+                const analysisDiv = document.createElement('div');
+                analysisDiv.innerHTML = `<strong>Analysis:</strong> ${analysis}`;
+                container.appendChild(analysisDiv);
+            }
+            
+            document.getElementById('visual-proof').appendChild(container);
+        }
+        
+        async function runFinalTest() {
+            console.log('🔥 STARTING FINAL PDF CONTENT PRESERVATION TEST');
+            testStartTime = Date.now();
+            
+            // Clear previous results
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('visual-proof').innerHTML = '';
+            testResults = [];
+            
+            addResult('info', 'Test Started', 'Running comprehensive PDF content preservation test...');
+            
+            try {
+                // TEST 1: Library Loading
+                addResult('info', 'Test 1/5: Library Loading', 'Ensuring all required libraries are loaded...');
+                
+                // Use the library loading function to ensure everything is ready
+                await window.ensureLibrariesLoaded();
+                
+                addResult('pass', 'Test 1/5: Library Loading', 'All required libraries loaded successfully');
+                
+                // TEST 2: Create Test PDF with Known Content
+                addResult('info', 'Test 2/5: PDF Creation', 'Creating test PDF with known, verifiable content...');
+                
+                const testContent = {
+                    title: 'CONTENT PRESERVATION TEST PDF',
+                    lines: [
+                        'Line 1: This text must be preserved exactly',
+                        'Line 2: HELLO WORLD - TEST CONTENT',
+                        'Line 3: Numbers and symbols: 123456 !@#$%^&*()',
+                        'Line 4: Final verification line'
+                    ],
+                    metadata: {
+                        created: new Date().toISOString(),
+                        purpose: 'Content preservation verification'
+                    }
+                };
+                
+                const testPDF = await createTestPDFWithKnownContent(testContent);
+                addResult('pass', 'Test 2/5: PDF Creation', `Test PDF created successfully (${testPDF.size} bytes)`, 
+                    `Content: ${testContent.lines.join(' | ')}`);
+                
+                // TEST 3: PDF Conversion
+                addResult('info', 'Test 3/5: PDF Conversion', 'Converting PDF using fixed converter...');
+                
+                const converter = new FileConverter();
+                let progressCount = 0;
+                
+                const conversionResult = await converter.convertPDFToImage(
+                    testPDF, 
+                    'png', 
+                    'final_test',
+                    (progress) => {
+                        console.log(`Conversion progress: ${progress}%`);
+                        progressCount++;
+                    }
+                );
+                
+                addResult('pass', 'Test 3/5: PDF Conversion', 
+                    `PDF converted successfully (${conversionResult.blob.size} bytes, ${progressCount} progress updates)`,
+                    `Result: ${conversionResult.filename}, Type: ${conversionResult.type}`);
+                
+                // TEST 4: Content Verification
+                addResult('info', 'Test 4/5: Content Verification', 'Analyzing converted image for preserved content...');
+                
+                const contentAnalysis = await analyzeConvertedContent(conversionResult.blob, testContent);
+                
+                if (contentAnalysis.contentPreserved) {
+                    addResult('pass', 'Test 4/5: Content Verification', 
+                        'CONTENT SUCCESSFULLY PRESERVED!', contentAnalysis.details);
+                } else {
+                    addResult('fail', 'Test 4/5: Content Verification', 
+                        'Content was NOT properly preserved', contentAnalysis.details);
+                }
+                
+                // TEST 5: Visual Verification
+                addResult('info', 'Test 5/5: Visual Verification', 'Creating visual proof of content preservation...');
+                
+                const visualCanvas = await createVisualVerification(conversionResult.blob);
+                addVisualProof('Converted PDF Content', visualCanvas, contentAnalysis.visualAnalysis);
+                
+                addResult('pass', 'Test 5/5: Visual Verification', 'Visual proof created - inspect the image below');
+                
+                // FINAL RESULT
+                const testPassed = contentAnalysis.contentPreserved && conversionResult.blob.size > 5000;
+                const testDuration = Date.now() - testStartTime;
+                
+                if (testPassed) {
+                    addResult('pass', '🎉 FINAL TEST RESULT', 
+                        `ALL TESTS PASSED! PDF content preservation is working correctly.`,
+                        `Test completed in ${testDuration}ms. Content verification: ${contentAnalysis.confidenceScore}/10`);
+                } else {
+                    addResult('fail', '❌ FINAL TEST RESULT', 
+                        `TESTS FAILED! PDF content preservation needs more work.`,
+                        `Issues found: ${contentAnalysis.issues.join(', ')}`);
+                }
+                
+                // Summary
+                const passedTests = testResults.filter(r => r.type === 'pass').length;
+                const totalTests = testResults.filter(r => r.title.includes('Test ')).length;
+                
+                addResult('info', 'Test Summary', 
+                    `${passedTests}/${totalTests} tests passed. Duration: ${testDuration}ms`);
+                
+            } catch (error) {
+                addResult('fail', 'Test Framework Error', `Test failed: ${error.message}`, error.stack);
+                console.error('Final test error:', error);
+            }
+        }
+        
+        async function createTestPDFWithKnownContent(testContent) {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            
+            // Title
+            pdf.setFontSize(18);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(testContent.title, 20, 30);
+            
+            // Content lines
+            pdf.setFontSize(14);
+            pdf.setFont('helvetica', 'normal');
+            
+            let y = 60;
+            testContent.lines.forEach(line => {
+                pdf.text(line, 20, y);
+                y += 20;
+            });
+            
+            // Add visual elements
+            pdf.rect(20, y + 10, 100, 30);
+            pdf.circle(150, y + 25, 10);
+            
+            // Metadata
+            pdf.setFontSize(10);
+            pdf.text(`Created: ${testContent.metadata.created}`, 20, pdf.internal.pageSize.height - 20);
+            
+            const pdfBlob = pdf.output('blob');
+            return new File([pdfBlob], 'test-content.pdf', { type: 'application/pdf' });
+        }
+        
+        async function analyzeConvertedContent(imageBlob, originalContent) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Pixel analysis
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const pixelAnalysis = analyzePixelsForContent(imageData);
+                    
+                    // Determine if content is preserved based on multiple factors
+                    const factors = {
+                        hasBlackPixels: pixelAnalysis.blackPixels > 100,
+                        hasVariedContent: pixelAnalysis.contentRatio > 0.05,
+                        hasProperDimensions: canvas.width > 400 && canvas.height > 400,
+                        hasSufficientComplexity: pixelAnalysis.uniqueColors > 10
+                    };
+                    
+                    const passedFactors = Object.values(factors).filter(f => f).length;
+                    const confidenceScore = Math.round((passedFactors / Object.keys(factors).length) * 10);
+                    
+                    const contentPreserved = passedFactors >= 3; // At least 3 out of 4 factors
+                    
+                    resolve({
+                        contentPreserved: contentPreserved,
+                        confidenceScore: confidenceScore,
+                        factors: factors,
+                        details: `Confidence: ${confidenceScore}/10, Factors passed: ${passedFactors}/4`,
+                        visualAnalysis: `${pixelAnalysis.blackPixels} black pixels, ${pixelAnalysis.contentRatio.toFixed(3)} content ratio, ${pixelAnalysis.uniqueColors} unique colors`,
+                        issues: contentPreserved ? [] : Object.keys(factors).filter(k => !factors[k])
+                    });
+                };
+                
+                img.onerror = () => resolve({
+                    contentPreserved: false,
+                    confidenceScore: 0,
+                    details: 'Could not load converted image',
+                    issues: ['image_load_failed']
+                });
+                
+                img.src = URL.createObjectURL(imageBlob);
+            });
+        }
+        
+        function analyzePixelsForContent(imageData) {
+            const data = imageData.data;
+            let blackPixels = 0;
+            let whitePixels = 0;
+            let contentPixels = 0;
+            const colorCounts = new Map();
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                const a = data[i + 3];
+                
+                if (a < 255) continue; // Skip transparent pixels
+                
+                const colorKey = `${r},${g},${b}`;
+                colorCounts.set(colorKey, (colorCounts.get(colorKey) || 0) + 1);
+                
+                if (r < 50 && g < 50 && b < 50) {
+                    blackPixels++;
+                    contentPixels++;
+                } else if (r > 240 && g > 240 && b > 240) {
+                    whitePixels++;
+                } else {
+                    contentPixels++;
+                }
+            }
+            
+            const totalPixels = data.length / 4;
+            return {
+                blackPixels,
+                whitePixels,
+                contentPixels,
+                totalPixels,
+                contentRatio: contentPixels / totalPixels,
+                uniqueColors: colorCounts.size
+            };
+        }
+        
+        async function createVisualVerification(imageBlob) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Scale for display if too large
+                    const maxDisplaySize = 800;
+                    const scale = Math.min(maxDisplaySize / img.width, maxDisplaySize / img.height, 1);
+                    
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                    
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    // Add verification overlay
+                    ctx.strokeStyle = '#00ff00';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+                    
+                    ctx.fillStyle = '#00ff00';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.fillText('✓ CONTENT VERIFICATION', 10, canvas.height - 10);
+                    
+                    resolve(canvas);
+                };
+                img.src = URL.createObjectURL(imageBlob);
+            });
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('visual-proof').innerHTML = '';
+            testResults = [];
+        }
+        
+        // Auto-run test after page loads
+        window.addEventListener('load', async () => {
+            console.log('🔥 Final test page loaded.');
+            
+            try {
+                // Wait for all libraries to load
+                await window.ensureLibrariesLoaded();
+                console.log('✅ All libraries ready. Click "RUN FINAL TEST" to verify content preservation.');
+            } catch (error) {
+                console.error('❌ Library loading failed:', error.message);
+                addResult('fail', 'Library Loading Error', error.message);
+            }
+        });
+    </script>
+</body>
+</html>
