@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://yourwebsite.com/sitemap.xml
+
+# Crawl-delay to be respectful to search engines
+Crawl-delay: 1
+
+# Allow indexing of main conversion functionality
+Allow: /index.html
+Allow: /*.js
+Allow: /*.css
+Allow: /sitemap.xml
