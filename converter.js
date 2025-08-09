@@ -197,71 +197,122 @@ class FileConverter {
                 
                 const pdfjsLib = window.pdfjsLib;
                 
-                // Read the file
+                // Read the file as array buffer
                 const arrayBuffer = await file.arrayBuffer();
+                onProgress(10);
                 
-                onProgress(20);
+                // Validate PDF file
+                if (arrayBuffer.byteLength === 0) {
+                    throw new Error('PDF file is empty');
+                }
                 
-                // Load PDF document
-                const pdf = await pdfjsLib.getDocument({ 
+                // Load PDF document with proper configuration
+                const loadingTask = pdfjsLib.getDocument({
                     data: arrayBuffer,
                     cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-                    cMapPacked: true
-                }).promise;
-                onProgress(40);
+                    cMapPacked: true,
+                    standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/',
+                    useSystemFonts: false,
+                    disableFontFace: false,
+                    disableAutoFetch: false,
+                    disableStream: false
+                });
                 
-                // Get first page (or all pages for multi-page PDFs)
+                onProgress(30);
+                
+                const pdf = await loadingTask.promise;
+                console.log('PDF loaded successfully:', pdf.numPages, 'pages');
+                
+                if (pdf.numPages === 0) {
+                    throw new Error('PDF has no pages');
+                }
+                
+                onProgress(50);
+                
+                // Get the first page
                 const page = await pdf.getPage(1);
+                console.log('Page loaded successfully');
+                
                 onProgress(60);
                 
-                // Set up canvas for rendering with higher quality
-                const scale = 3.0; // Higher scale for better quality
+                // Use reasonable scale to avoid memory issues
+                const scale = 2.0; // Reduced scale for better performance
                 const viewport = page.getViewport({ scale });
                 
+                console.log('Viewport dimensions:', viewport.width, 'x', viewport.height);
+                
+                // Create canvas with proper dimensions
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
                 
-                // Set canvas background to white for better PDF rendering
-                ctx.fillStyle = 'white';
+                // Set canvas size
+                canvas.width = Math.floor(viewport.width);
+                canvas.height = Math.floor(viewport.height);
+                
+                // Clear canvas with white background
+                ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
-                // Render PDF page to canvas with better rendering options
-                await page.render({
+                onProgress(70);
+                
+                // Render PDF page to canvas
+                const renderContext = {
                     canvasContext: ctx,
                     viewport: viewport,
                     intent: 'display',
                     renderInteractiveForms: false,
-                    transform: null,
-                    imageLayer: null,
-                    canvasFactory: null,
-                    background: 'white'
-                }).promise;
+                    optionalContentConfigPromise: null,
+                    annotationMode: pdfjsLib.AnnotationMode.ENABLE_FORMS,
+                };
+                
+                console.log('Starting PDF render...');
+                const renderTask = page.render(renderContext);
+                
+                await renderTask.promise;
+                console.log('PDF render complete');
                 
                 onProgress(90);
                 
-                // Convert canvas to blob with optimized quality
-                const outputFormat = targetFormat === 'jpg' ? 'image/jpeg' : `image/${targetFormat}`;
-                const quality = targetFormat === 'jpg' ? 0.95 : undefined;
+                // Verify canvas has content
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const hasContent = this.canvasHasContent(imageData);
                 
-                canvas.toBlob((blob) => {
-                    if (!blob) {
-                        reject(new Error('Failed to generate image blob from PDF'));
-                        return;
-                    }
-                    
-                    onProgress(100);
-                    resolve({
-                        blob,
-                        filename: `${fileName}_page1.${targetFormat}`,
-                        type: outputFormat
-                    });
-                }, outputFormat, quality);
+                if (!hasContent) {
+                    console.warn('Canvas appears to be blank, but proceeding with conversion');
+                }
+                
+                // Convert canvas to blob
+                const outputFormat = targetFormat === 'jpg' ? 'image/jpeg' : `image/${targetFormat}`;
+                const quality = targetFormat === 'jpg' ? 0.9 : undefined;
+                
+                return new Promise((blobResolve, blobReject) => {
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            blobReject(new Error('Failed to generate image blob from rendered PDF'));
+                            return;
+                        }
+                        
+                        console.log('Blob generated successfully, size:', blob.size);
+                        onProgress(100);
+                        
+                        blobResolve({
+                            blob,
+                            filename: `${fileName}_page1.${targetFormat}`,
+                            type: outputFormat
+                        });
+                    }, outputFormat, quality);
+                }).then(resolve).catch(reject);
                 
             } catch (error) {
                 console.error('PDF to image conversion error:', error);
-                reject(new Error(`Failed to convert PDF to image: ${error.message}`));
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileType: file.type
+                });
+                reject(new Error(`Failed to convert PDF to image: ${error.message || 'Unknown error'}`));
             }
         });
     }
@@ -289,14 +340,49 @@ class FileConverter {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            script.crossOrigin = 'anonymous';
+            
             script.onload = () => {
-                // Set worker source for PDF.js
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                resolve();
+                try {
+                    // Configure PDF.js worker
+                    if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+                        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                        console.log('PDF.js loaded and configured successfully');
+                        resolve();
+                    } else {
+                        reject(new Error('PDF.js library loaded but not properly initialized'));
+                    }
+                } catch (error) {
+                    reject(new Error(`Failed to configure PDF.js: ${error.message}`));
+                }
             };
-            script.onerror = () => reject(new Error('Failed to load PDF.js library'));
+            
+            script.onerror = (error) => {
+                console.error('Failed to load PDF.js script:', error);
+                reject(new Error('Failed to load PDF.js library from CDN'));
+            };
+            
             document.head.appendChild(script);
         });
+    }
+    
+    canvasHasContent(imageData) {
+        const data = imageData.data;
+        const threshold = 245; // Consider pixels with value < 245 as content (not pure white)
+        
+        // Sample every 4th pixel to check for non-white content
+        for (let i = 0; i < data.length; i += 16) { // RGBA format, so step by 16 to skip pixels
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            
+            // If any channel is significantly different from white, there's content
+            if (r < threshold || g < threshold || b < threshold) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     getOptimalImageFormat(mimeType) {
