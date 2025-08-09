@@ -188,31 +188,205 @@ class FileConverter {
     }
     
     async convertPDFToImage(file, targetFormat, fileName, onProgress) {
-        console.log('🚀 STARTING CONTENT-PRESERVING PDF CONVERSION');
+        console.log('🔧 REAL PDF CONTENT PRESERVATION - Starting');
         
         try {
-            // Use the working PDF converter that actually preserves content
-            if (!this.workingConverter) {
-                // Load the working converter script
-                await this.loadWorkingConverter();
-                this.workingConverter = new WorkingPDFConverter();
-            }
-            
-            onProgress(5);
-            console.log('✅ Using GUARANTEED content-preserving PDF converter');
-            
-            const result = await this.workingConverter.convertPDFToImage(file, targetFormat, fileName, onProgress);
-            
-            console.log('🎉 PDF CONVERSION COMPLETED WITH PRESERVED CONTENT');
-            return result;
-            
+            return await this.convertPDFWithRealContent(file, targetFormat, fileName, onProgress);
         } catch (error) {
-            console.error('❌ Content-preserving conversion failed:', error);
-            
-            // Fallback to basic conversion with clear indication
-            console.log('🔄 Using fallback converter with content representation');
-            return await this.createPDFRepresentation(file, targetFormat, fileName, onProgress);
+            console.error('❌ PDF conversion failed:', error);
+            throw new Error(`Cannot convert PDF: ${error.message}`);
         }
+    }
+    
+    async convertPDFWithRealContent(file, targetFormat, fileName, onProgress) {
+        console.log('📖 Loading PDF.js for REAL content extraction');
+        
+        // Load PDF.js with specific version that works
+        if (typeof window.pdfjsLib === 'undefined') {
+            await this.loadWorkingPDFJS();
+        }
+        
+        onProgress(10);
+        
+        // Read PDF file
+        const arrayBuffer = await file.arrayBuffer();
+        console.log('📄 PDF file loaded:', file.name, arrayBuffer.byteLength, 'bytes');
+        
+        onProgress(20);
+        
+        // Load PDF document with working configuration
+        const loadingTask = window.pdfjsLib.getDocument({
+            data: arrayBuffer,
+            password: '',
+            verbosity: 0
+        });
+        
+        const pdf = await loadingTask.promise;
+        console.log('✅ PDF document loaded successfully - Pages:', pdf.numPages);
+        
+        onProgress(40);
+        
+        // Get first page
+        const page = await pdf.getPage(1);
+        console.log('📄 Page 1 loaded');
+        
+        // Get viewport at high resolution
+        const scale = 2.0;
+        const viewport = page.getViewport({ scale: scale });
+        console.log('📐 Page size:', viewport.width, 'x', viewport.height);
+        
+        onProgress(60);
+        
+        // Create canvas for rendering
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        // Set white background
+        context.fillStyle = 'white';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        console.log('🎨 Canvas prepared for rendering');
+        onProgress(70);
+        
+        // Render PDF page to canvas - THIS IS THE KEY PART
+        const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+        };
+        
+        console.log('🖼️ Rendering PDF content to canvas...');
+        
+        // Wait for rendering to complete
+        const renderTask = page.render(renderContext);
+        await renderTask.promise;
+        
+        console.log('✅ PDF content rendered to canvas');
+        onProgress(90);
+        
+        // Verify we have content by checking pixels
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const hasContent = this.checkForRealContent(imageData);
+        console.log('🔍 Content verification:', hasContent ? 'CONTENT FOUND' : 'NO CONTENT');
+        
+        if (!hasContent) {
+            // If no content rendered, there might be an issue with the PDF or rendering
+            console.warn('⚠️ No content detected in rendered canvas');
+            
+            // Try to extract text and render it manually
+            const textContent = await page.getTextContent();
+            if (textContent.items && textContent.items.length > 0) {
+                console.log('📝 Found text content, rendering manually');
+                await this.renderTextContent(context, textContent, viewport);
+            }
+        }
+        
+        // Convert canvas to blob
+        const outputFormat = targetFormat === 'jpg' ? 'image/jpeg' : `image/${targetFormat}`;
+        const quality = targetFormat === 'jpg' ? 0.9 : undefined;
+        
+        return new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                onProgress(100);
+                console.log('✅ PDF conversion complete - Blob size:', blob.size);
+                resolve({
+                    blob,
+                    filename: `${fileName}.${targetFormat}`,
+                    type: outputFormat
+                });
+            }, outputFormat, quality);
+        });
+    }
+    
+    async loadWorkingPDFJS() {
+        return new Promise((resolve, reject) => {
+            // Use a reliable CDN and version
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js';
+            script.crossOrigin = 'anonymous';
+            
+            script.onload = () => {
+                // Set worker
+                if (window.pdfjsLib) {
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+                    console.log('✅ PDF.js loaded with worker configured');
+                    resolve();
+                } else {
+                    reject(new Error('PDF.js failed to load'));
+                }
+            };
+            
+            script.onerror = () => reject(new Error('Failed to load PDF.js from CDN'));
+            
+            document.head.appendChild(script);
+        });
+    }
+    
+    checkForRealContent(imageData) {
+        const data = imageData.data;
+        let nonWhitePixels = 0;
+        
+        // Check every 16th pixel (RGBA = 4 bytes per pixel, so 16 bytes = 4 pixels)
+        for (let i = 0; i < data.length; i += 16) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            
+            // If pixel is not pure white or very close to white
+            if (r < 245 || g < 245 || b < 245) {
+                nonWhitePixels++;
+            }
+        }
+        
+        const totalPixelsChecked = data.length / 16;
+        const contentRatio = nonWhitePixels / totalPixelsChecked;
+        
+        console.log('📊 Content analysis:', {
+            nonWhitePixels,
+            totalPixelsChecked,
+            contentRatio: (contentRatio * 100).toFixed(2) + '%'
+        });
+        
+        return contentRatio > 0.01; // At least 1% non-white pixels
+    }
+    
+    async renderTextContent(context, textContent, viewport) {
+        console.log('📝 Manually rendering text content');
+        
+        context.fillStyle = 'black';
+        context.font = '12px sans-serif';
+        
+        let yPosition = 50;
+        
+        textContent.items.forEach((item, index) => {
+            if (item.str && item.str.trim()) {
+                // Get text position from transform matrix
+                const transform = item.transform;
+                let x = transform[4];
+                let y = viewport.height - transform[5]; // Flip Y coordinate
+                
+                // Scale coordinates
+                x = x * (viewport.width / viewport.viewBox[2]);
+                y = y * (viewport.height / viewport.viewBox[3]);
+                
+                // Ensure coordinates are within canvas
+                x = Math.max(0, Math.min(x, viewport.width - 100));
+                y = Math.max(20, Math.min(y, viewport.height - 20));
+                
+                // If coordinates seem invalid, use sequential positioning
+                if (x < 10 || y < 10) {
+                    x = 20;
+                    y = yPosition;
+                    yPosition += 15;
+                }
+                
+                context.fillText(item.str, x, y);
+                console.log('✏️ Rendered text at', x, y, ':', item.str.substring(0, 50));
+            }
+        });
+        
+        console.log('✅ Text content manually rendered');
     }
     
     async loadWorkingConverter() {

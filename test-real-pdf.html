@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Real PDF Content Extraction</title>
+</head>
+<body>
+    <h1>Test Real PDF Content Extraction</h1>
+    
+    <div>
+        <input type="file" id="pdfFile" accept=".pdf">
+        <button onclick="testPDFExtraction()">Test PDF Content Extraction</button>
+    </div>
+    
+    <div id="results" style="margin-top: 20px;"></div>
+    <canvas id="resultCanvas" style="border: 1px solid black; max-width: 100%; margin-top: 20px;"></canvas>
+    
+    <script src="converter.js"></script>
+    <script>
+        async function testPDFExtraction() {
+            const fileInput = document.getElementById('pdfFile');
+            const results = document.getElementById('results');
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                results.innerHTML = '<p style="color: red;">Please select a PDF file</p>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            results.innerHTML = '<p>Testing PDF content extraction...</p>';
+            
+            const converter = new FileConverter();
+            
+            try {
+                console.log('🧪 TESTING REAL PDF CONTENT EXTRACTION');
+                
+                const result = await converter.convertPDFToImage(
+                    file, 
+                    'png', 
+                    'test',
+                    (progress) => {
+                        results.innerHTML = `<p>Progress: ${progress}%</p>`;
+                    }
+                );
+                
+                // Display the result
+                const canvas = document.getElementById('resultCanvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    
+                    results.innerHTML = `
+                        <div style="color: green;">
+                            <h3>✅ Conversion Successful!</h3>
+                            <p>Original: ${file.name} (${(file.size/1024).toFixed(1)} KB)</p>
+                            <p>Converted: ${result.filename} (${(result.blob.size/1024).toFixed(1)} KB)</p>
+                            <p>Canvas size: ${canvas.width} x ${canvas.height}</p>
+                        </div>
+                    `;
+                };
+                
+                img.src = URL.createObjectURL(result.blob);
+                
+                console.log('✅ PDF content extraction test completed');
+                
+            } catch (error) {
+                results.innerHTML = `<p style="color: red;">❌ Error: ${error.message}</p>`;
+                console.error('❌ PDF extraction test failed:', error);
+            }
+        }
+        
+        // Create a simple test PDF
+        function createTestPDF() {
+            // This would create a test PDF with actual content
+            console.log('Creating test PDF...');
+        }
+    </script>
+</body>
+</html>
