@@ -190,147 +190,100 @@ class FileConverter {
     async convertPDFToImage(file, targetFormat, fileName, onProgress) {
         return new Promise(async (resolve, reject) => {
             try {
-                // Step 1: Load PDF.js with extensive debugging
-                onProgress(5);
-                console.log('🔧 Starting PDF conversion for:', file.name, file.size, 'bytes');
-                
-                if (typeof window.pdfjsLib === 'undefined') {
-                    console.log('📚 Loading PDF.js library...');
-                    await this.loadPDFJS();
-                }
-                
-                if (!window.pdfjsLib) {
-                    throw new Error('PDF.js failed to load - library not available');
-                }
-                
-                console.log('✅ PDF.js loaded successfully');
                 onProgress(10);
+                console.log('🔧 Starting PDF to Image conversion');
+                console.log('File:', file.name, file.size, 'bytes');
                 
-                // Step 2: Read and validate file
-                const arrayBuffer = await file.arrayBuffer();
-                console.log('📖 File read as ArrayBuffer:', arrayBuffer.byteLength, 'bytes');
-                
-                if (arrayBuffer.byteLength === 0) {
-                    throw new Error('PDF file is empty');
-                }
-                
-                // Check if it's actually a PDF
-                const uint8Array = new Uint8Array(arrayBuffer);
-                const header = Array.from(uint8Array.slice(0, 8)).map(b => String.fromCharCode(b)).join('');
-                console.log('📄 File header:', header);
-                
-                if (!header.startsWith('%PDF-')) {
-                    throw new Error('File does not appear to be a valid PDF');
+                // Load PDF.js
+                if (typeof window.pdfjsLib === 'undefined') {
+                    await this.loadPDFJS();
                 }
                 
                 onProgress(20);
                 
-                // Step 3: Configure PDF.js with minimal options for debugging
-                console.log('⚙️ Configuring PDF.js...');
-                const loadingTask = window.pdfjsLib.getDocument({
-                    data: arrayBuffer,
-                    verbosity: 1, // Enable verbose logging
-                    disableAutoFetch: true,
-                    disableStream: true,
-                    disableFontFace: true, // Disable custom fonts to avoid CORS issues
-                    useSystemFonts: true
-                });
+                // Read file
+                const arrayBuffer = await file.arrayBuffer();
+                console.log('📖 File loaded into memory');
+                
+                // Validate PDF header
+                const uint8Array = new Uint8Array(arrayBuffer);
+                const header = String.fromCharCode(...uint8Array.slice(0, 8));
+                if (!header.startsWith('%PDF-')) {
+                    throw new Error('Invalid PDF file');
+                }
                 
                 onProgress(30);
                 
-                // Step 4: Load PDF document
-                console.log('📋 Loading PDF document...');
+                // Load PDF document
+                const loadingTask = window.pdfjsLib.getDocument({
+                    data: uint8Array,
+                    cMapUrl: 'https://unpkg.com/pdfjs-dist@3.4.120/cmaps/',
+                    cMapPacked: true
+                });
+                
                 const pdf = await loadingTask.promise;
-                console.log('✅ PDF loaded - Pages:', pdf.numPages, 'Fingerprint:', pdf.fingerprints[0]);
-                
-                if (pdf.numPages === 0) {
-                    throw new Error('PDF has no pages');
-                }
-                
-                onProgress(40);
-                
-                // Step 5: Get first page
-                console.log('📑 Loading page 1...');
-                const page = await pdf.getPage(1);
-                console.log('✅ Page loaded successfully');
-                
-                const viewport = page.getViewport({ scale: 1.5 });
-                console.log('📐 Page dimensions:', viewport.width, 'x', viewport.height);
+                console.log('✅ PDF loaded successfully, pages:', pdf.numPages);
                 
                 onProgress(50);
                 
-                // Step 6: Create and configure canvas
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d', { alpha: false });
+                // Get first page
+                const page = await pdf.getPage(1);
+                console.log('✅ Page 1 loaded');
                 
-                canvas.width = Math.floor(viewport.width);
-                canvas.height = Math.floor(viewport.height);
+                // Set up viewport
+                const scale = 2.0;
+                const viewport = page.getViewport({ scale });
+                console.log('📐 Viewport:', viewport.width, 'x', viewport.height);
                 
-                // Fill with white background first
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                console.log('🎨 Canvas created:', canvas.width, 'x', canvas.height);
                 onProgress(60);
                 
-                // Step 7: Render PDF to canvas with minimal config
-                console.log('🖼️ Starting PDF rendering...');
+                // Create canvas
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                // White background
+                context.fillStyle = 'white';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                
+                console.log('🎨 Canvas ready');
+                onProgress(70);
+                
+                // Render PDF page to canvas
                 const renderContext = {
-                    canvasContext: ctx,
+                    canvasContext: context,
                     viewport: viewport
                 };
                 
-                const renderTask = page.render(renderContext);
+                console.log('🖼️ Rendering PDF to canvas...');
+                await page.render(renderContext).promise;
+                console.log('✅ PDF rendered to canvas');
                 
-                // Wait for rendering with timeout
-                const timeoutPromise = new Promise((_, timeoutReject) => {
-                    setTimeout(() => timeoutReject(new Error('PDF rendering timeout')), 10000);
-                });
+                onProgress(90);
                 
-                await Promise.race([renderTask.promise, timeoutPromise]);
-                console.log('✅ PDF rendering completed');
+                // Check if we have actual content (not just white canvas)
+                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                let hasRealContent = false;
                 
-                onProgress(80);
-                
-                // Step 8: Verify canvas content
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                console.log('🔍 Checking canvas content...');
-                
-                let hasContent = false;
-                const data = imageData.data;
-                
-                // Check for any non-white pixels
-                for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i];
-                    const g = data[i + 1]; 
-                    const b = data[i + 2];
+                // Sample pixels to check for content
+                for (let i = 0; i < imageData.data.length; i += 40) { // Sample every 10th pixel
+                    const r = imageData.data[i];
+                    const g = imageData.data[i + 1];
+                    const b = imageData.data[i + 2];
                     
-                    // If any pixel is not white, we have content
-                    if (r < 250 || g < 250 || b < 250) {
-                        hasContent = true;
+                    // If pixel is significantly different from white
+                    if (r < 240 || g < 240 || b < 240) {
+                        hasRealContent = true;
                         break;
                     }
                 }
                 
-                console.log('📊 Canvas has content:', hasContent);
+                console.log('📊 Content detected:', hasRealContent);
                 
-                if (!hasContent) {
-                    // Try a different approach - add some debug content to see if canvas works
-                    ctx.fillStyle = '#000000';
-                    ctx.font = '20px Arial';
-                    ctx.fillText('PDF Content Should Appear Here', 50, 50);
-                    ctx.fillText(`Original PDF: ${file.name}`, 50, 80);
-                    ctx.fillText(`Size: ${file.size} bytes, Pages: ${pdf.numPages}`, 50, 110);
-                    console.warn('⚠️ No PDF content detected, added debug text');
-                }
-                
-                onProgress(90);
-                
-                // Step 9: Convert to image blob
+                // Convert canvas to blob
                 const outputFormat = targetFormat === 'jpg' ? 'image/jpeg' : `image/${targetFormat}`;
                 const quality = targetFormat === 'jpg' ? 0.9 : undefined;
-                
-                console.log('💾 Converting to blob format:', outputFormat);
                 
                 canvas.toBlob((blob) => {
                     if (!blob) {
@@ -338,19 +291,18 @@ class FileConverter {
                         return;
                     }
                     
-                    console.log('✅ Conversion complete! Blob size:', blob.size);
+                    console.log('✅ Image blob created, size:', blob.size);
                     onProgress(100);
                     
                     resolve({
                         blob,
-                        filename: `${fileName}_page1.${targetFormat}`,
+                        filename: `${fileName}.${targetFormat}`,
                         type: outputFormat
                     });
                 }, outputFormat, quality);
                 
             } catch (error) {
-                console.error('❌ PDF conversion failed:', error);
-                console.error('Stack trace:', error.stack);
+                console.error('❌ PDF conversion error:', error);
                 reject(new Error(`PDF conversion failed: ${error.message}`));
             }
         });
@@ -382,47 +334,27 @@ class FileConverter {
         console.log('📚 Loading PDF.js from CDN...');
         
         return new Promise((resolve, reject) => {
+            // Load both the main library and worker
             const script = document.createElement('script');
-            // Use a more reliable version
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
             script.crossOrigin = 'anonymous';
             
             script.onload = () => {
-                console.log('📚 PDF.js script loaded from CDN');
+                console.log('📚 PDF.js main script loaded');
                 
-                // Wait a moment for the library to initialize
-                setTimeout(() => {
-                    try {
-                        if (typeof window.pdfjsLib === 'undefined') {
-                            // Try alternative global name
-                            if (typeof window.pdfjsWorker !== 'undefined') {
-                                window.pdfjsLib = window.pdfjsWorker;
-                            } else {
-                                throw new Error('PDF.js library not found in global scope');
-                            }
-                        }
-                        
-                        // Configure worker with fallback
-                        if (window.pdfjsLib.GlobalWorkerOptions) {
-                            // Disable worker for now to avoid CORS issues
-                            window.pdfjsLib.GlobalWorkerOptions.workerSrc = null;
-                            window.pdfjsLib.disableWorker = true;
-                            console.log('✅ PDF.js configured (worker disabled for compatibility)');
-                        }
-                        
-                        console.log('✅ PDF.js ready:', !!window.pdfjsLib);
-                        resolve();
-                        
-                    } catch (error) {
-                        console.error('❌ PDF.js configuration failed:', error);
-                        reject(new Error(`PDF.js configuration failed: ${error.message}`));
-                    }
-                }, 100);
+                // Set up worker
+                if (window.pdfjsLib) {
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+                    console.log('✅ PDF.js worker configured');
+                    resolve();
+                } else {
+                    reject(new Error('PDF.js library not available after loading'));
+                }
             };
             
             script.onerror = (error) => {
-                console.error('❌ Failed to load PDF.js from CDN:', error);
-                reject(new Error('Failed to load PDF.js library - CDN unavailable'));
+                console.error('❌ Failed to load PDF.js:', error);
+                reject(new Error('Failed to load PDF.js library'));
             };
             
             document.head.appendChild(script);

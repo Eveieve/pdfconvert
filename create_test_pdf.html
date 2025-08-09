@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Test PDF</title>
+</head>
+<body>
+    <h1>Create Test PDF</h1>
+    <button onclick="createTestPDF()">Create Test PDF</button>
+    <div id="result"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        async function createTestPDF() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            
+            // Add some text content
+            pdf.setFontSize(20);
+            pdf.text('TEST PDF CONTENT', 20, 20);
+            
+            pdf.setFontSize(14);
+            pdf.text('This is a test PDF with real content.', 20, 40);
+            pdf.text('Line 2: Hello World!', 20, 60);
+            pdf.text('Line 3: PDF to Image Conversion Test', 20, 80);
+            pdf.text('Line 4: This should appear in converted image', 20, 100);
+            
+            // Add some shapes
+            pdf.setDrawColor(255, 0, 0);
+            pdf.rect(20, 120, 50, 30);
+            
+            pdf.setDrawColor(0, 255, 0);
+            pdf.circle(100, 135, 15);
+            
+            // Save the PDF
+            const blob = pdf.output('blob');
+            const url = URL.createObjectURL(blob);
+            
+            // Create download link
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'test-content.pdf';
+            a.textContent = 'Download Test PDF';
+            a.style.padding = '10px';
+            a.style.backgroundColor = '#007bff';
+            a.style.color = 'white';
+            a.style.textDecoration = 'none';
+            a.style.borderRadius = '5px';
+            
+            document.getElementById('result').innerHTML = '<p>Test PDF created!</p>';
+            document.getElementById('result').appendChild(a);
+            
+            console.log('✅ Test PDF created with content');
+        }
+    </script>
+</body>
+</html>

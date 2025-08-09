@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Conversion Test</title>
+</head>
+<body>
+    <h1>PDF Conversion Test</h1>
+    <input type="file" id="fileInput" accept=".pdf">
+    <button onclick="testConversion()">Test PDF to Image</button>
+    <div id="result"></div>
+    <canvas id="testCanvas" style="border: 1px solid black; margin: 20px 0;"></canvas>
+
+    <script src="converter.js"></script>
+    <script>
+        const converter = new FileConverter();
+        
+        async function testConversion() {
+            const fileInput = document.getElementById('fileInput');
+            const result = document.getElementById('result');
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                result.innerHTML = '<p style="color: red;">Please select a PDF file first</p>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            result.innerHTML = '<p>Testing conversion...</p>';
+            
+            try {
+                console.log('🧪 TESTING PDF CONVERSION');
+                console.log('File:', file.name, file.size, file.type);
+                
+                const convertedFile = await converter.convertPDFToImage(
+                    file, 
+                    'png', 
+                    'test',
+                    (progress) => {
+                        result.innerHTML = `<p>Progress: ${progress}%</p>`;
+                        console.log('Progress:', progress + '%');
+                    }
+                );
+                
+                // Show the result
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(convertedFile.blob);
+                img.style.maxWidth = '500px';
+                img.style.border = '2px solid green';
+                
+                result.innerHTML = `
+                    <p style="color: green;">✅ Conversion successful!</p>
+                    <p>Original: ${file.name} (${file.size} bytes)</p>
+                    <p>Converted: ${convertedFile.filename} (${convertedFile.blob.size} bytes)</p>
+                `;
+                result.appendChild(img);
+                
+                console.log('✅ Test completed successfully');
+                
+            } catch (error) {
+                result.innerHTML = `<p style="color: red;">❌ Error: ${error.message}</p>`;
+                console.error('❌ Test failed:', error);
+            }
+        }
+    </script>
+</body>
+</html>
