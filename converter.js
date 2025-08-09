@@ -102,42 +102,71 @@ class FileConverter {
                         await this.loadJsPDF();
                     }
                     
-                    // Progress simulation
-                    let progress = 0;
-                    const progressInterval = setInterval(() => {
-                        progress += 15;
-                        onProgress(Math.min(progress, 90));
-                        if (progress >= 90) {
-                            clearInterval(progressInterval);
-                        }
-                    }, 100);
+                    onProgress(20);
                     
-                    // Create PDF using jsPDF
+                    // Create PDF using jsPDF with better quality settings
                     const { jsPDF } = window;
-                    const pdf = new jsPDF();
                     
-                    // Calculate dimensions to fit A4 page
+                    // Determine optimal page orientation and size based on image
+                    const isLandscape = img.width > img.height;
+                    const orientation = isLandscape ? 'landscape' : 'portrait';
+                    
+                    const pdf = new jsPDF({
+                        orientation: orientation,
+                        unit: 'mm',
+                        format: 'a4',
+                        compress: true
+                    });
+                    
+                    onProgress(40);
+                    
+                    // Get PDF page dimensions
                     const pdfWidth = pdf.internal.pageSize.getWidth();
                     const pdfHeight = pdf.internal.pageSize.getHeight();
-                    const ratio = Math.min(pdfWidth / img.width, pdfHeight / img.height);
+                    
+                    // Calculate dimensions to maintain aspect ratio
+                    const margin = 10; // 10mm margin
+                    const maxWidth = pdfWidth - (margin * 2);
+                    const maxHeight = pdfHeight - (margin * 2);
+                    
+                    const widthRatio = maxWidth / img.width;
+                    const heightRatio = maxHeight / img.height;
+                    const ratio = Math.min(widthRatio, heightRatio);
                     
                     const width = img.width * ratio;
                     const height = img.height * ratio;
                     
-                    // Center the image
+                    // Center the image on the page
                     const x = (pdfWidth - width) / 2;
                     const y = (pdfHeight - height) / 2;
                     
-                    // Convert image to base64 and add to PDF
+                    onProgress(60);
+                    
+                    // Convert image to high-quality base64
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
+                    
+                    // Use higher resolution for better quality
+                    const scaleFactor = 2;
+                    canvas.width = img.width * scaleFactor;
+                    canvas.height = img.height * scaleFactor;
+                    
+                    ctx.scale(scaleFactor, scaleFactor);
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
                     ctx.drawImage(img, 0, 0);
                     
-                    const imgData = canvas.toDataURL('image/jpeg', 0.9);
-                    pdf.addImage(imgData, 'JPEG', x, y, width, height);
+                    onProgress(80);
                     
+                    // Get optimal image format
+                    const format = this.getOptimalImageFormat(file.type);
+                    const quality = format === 'JPEG' ? 0.95 : undefined;
+                    const imgData = canvas.toDataURL(`image/${format.toLowerCase()}`, quality);
+                    
+                    // Add image to PDF with compression
+                    pdf.addImage(imgData, format, x, y, width, height, undefined, 'MEDIUM');
+                    
+                    // Generate PDF blob
                     const pdfBlob = pdf.output('blob');
                     
                     onProgress(100);
@@ -148,7 +177,8 @@ class FileConverter {
                     });
                     
                 } catch (error) {
-                    reject(error);
+                    console.error('Image to PDF conversion error:', error);
+                    reject(new Error(`Failed to convert image to PDF: ${error.message}`));
                 }
             };
             
@@ -173,15 +203,19 @@ class FileConverter {
                 onProgress(20);
                 
                 // Load PDF document
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const pdf = await pdfjsLib.getDocument({ 
+                    data: arrayBuffer,
+                    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                    cMapPacked: true
+                }).promise;
                 onProgress(40);
                 
-                // Get first page
+                // Get first page (or all pages for multi-page PDFs)
                 const page = await pdf.getPage(1);
                 onProgress(60);
                 
-                // Set up canvas for rendering
-                const scale = 2.0; // Higher scale for better quality
+                // Set up canvas for rendering with higher quality
+                const scale = 3.0; // Higher scale for better quality
                 const viewport = page.getViewport({ scale });
                 
                 const canvas = document.createElement('canvas');
@@ -189,23 +223,38 @@ class FileConverter {
                 canvas.width = viewport.width;
                 canvas.height = viewport.height;
                 
-                // Render PDF page to canvas
+                // Set canvas background to white for better PDF rendering
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Render PDF page to canvas with better rendering options
                 await page.render({
                     canvasContext: ctx,
-                    viewport: viewport
+                    viewport: viewport,
+                    intent: 'display',
+                    renderInteractiveForms: false,
+                    transform: null,
+                    imageLayer: null,
+                    canvasFactory: null,
+                    background: 'white'
                 }).promise;
                 
                 onProgress(90);
                 
-                // Convert canvas to blob
+                // Convert canvas to blob with optimized quality
                 const outputFormat = targetFormat === 'jpg' ? 'image/jpeg' : `image/${targetFormat}`;
-                const quality = targetFormat === 'jpg' ? 0.9 : undefined;
+                const quality = targetFormat === 'jpg' ? 0.95 : undefined;
                 
                 canvas.toBlob((blob) => {
+                    if (!blob) {
+                        reject(new Error('Failed to generate image blob from PDF'));
+                        return;
+                    }
+                    
                     onProgress(100);
                     resolve({
                         blob,
-                        filename: `${fileName}.${targetFormat}`,
+                        filename: `${fileName}_page1.${targetFormat}`,
                         type: outputFormat
                     });
                 }, outputFormat, quality);
@@ -250,6 +299,18 @@ class FileConverter {
         });
     }
 
+    getOptimalImageFormat(mimeType) {
+        // Determine best format for PDF embedding
+        if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
+            return 'JPEG';
+        } else if (mimeType.includes('png')) {
+            return 'PNG';
+        } else {
+            // Default to JPEG for better compression
+            return 'JPEG';
+        }
+    }
+    
     downloadFile(result) {
         const url = URL.createObjectURL(result.blob);
         const a = document.createElement('a');

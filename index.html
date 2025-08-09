@@ -647,12 +647,12 @@
                     const file = selectedFiles[i];
                     const targetFormat = toFormat.value;
                     
-                    progressText.textContent = `Converting ${file.name}...`;
+                    progressText.textContent = `Converting ${file.name} to ${targetFormat.toUpperCase()}...`;
                     
                     const result = await converter.convertFile(file, targetFormat, (progress) => {
                         const overallProgress = ((i / selectedFiles.length) * 100) + (progress / selectedFiles.length);
                         progressFill.style.width = overallProgress + '%';
-                        progressText.textContent = `Converting ${file.name}... ${Math.round(progress)}%`;
+                        progressText.textContent = `Converting ${file.name} to ${targetFormat.toUpperCase()}... ${Math.round(progress)}%`;
                     });
                     
                     convertedResults.push(result);
@@ -670,10 +670,17 @@
                 };
                 
             } catch (error) {
-                progressText.textContent = `Error: ${error.message}`;
+                console.error('Conversion failed:', error);
+                progressText.textContent = `Conversion failed: ${error.message}`;
+                progressText.style.color = '#dc3545';
                 convertBtn.textContent = 'Try Again';
                 convertBtn.disabled = false;
-                convertBtn.onclick = () => location.reload();
+                convertBtn.style.background = '#dc3545';
+                convertBtn.onclick = () => {
+                    progressText.style.color = '#333';
+                    convertBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    resetConverter();
+                };
             }
         });
         
